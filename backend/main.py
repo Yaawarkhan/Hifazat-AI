@@ -356,6 +356,63 @@ async def websocket_endpoint(websocket: WebSocket):
             cam.stop()
 
 
+@app.websocket("/ws/mobile")
+async def mobile_camera_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for mobile camera streaming."""
+    await manager.connect(websocket)
+    print("📱 Mobile camera connected")
+    
+    try:
+        while True:
+            # Receive frame from mobile
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            
+            if message.get("type") == "frame":
+                frame_data = message.get("data", "")
+                camera_id = message.get("cameraId", "mobile-cam")
+                
+                # Decode base64 frame
+                if frame_data.startswith("data:image"):
+                    frame_data = frame_data.split(",")[1]
+                
+                try:
+                    frame_bytes = base64.b64decode(frame_data)
+                    nparr = np.frombuffer(frame_bytes, np.uint8)
+                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    
+                    if frame is not None:
+                        # Process frame with YOLO + face recognition
+                        result = processor.process_frame(frame)
+                        annotated = result["annotated_frame"]
+                        detections = result["detections"]
+                        
+                        # Encode processed frame
+                        _, buffer = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, FRAME_QUALITY])
+                        frame_b64 = base64.b64encode(buffer).decode('utf-8')
+                        
+                        # Broadcast to all dashboard clients
+                        await manager.broadcast({
+                            "type": "frame",
+                            "cameraId": camera_id,
+                            "data": f"data:image/jpeg;base64,{frame_b64}"
+                        })
+                        
+                        if detections:
+                            await manager.broadcast({
+                                "type": "detection",
+                                "cameraId": camera_id,
+                                "data": detections
+                            })
+                            
+                except Exception as e:
+                    print(f"❌ Frame processing error: {e}")
+                    
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        print("📱 Mobile camera disconnected")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

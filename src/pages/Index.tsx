@@ -6,8 +6,11 @@ import { CameraCard } from "@/components/dashboard/CameraCard";
 import { LiveFeedViewer } from "@/components/dashboard/LiveFeedViewer";
 import { EventLog } from "@/components/dashboard/EventLog";
 import { ConnectionStatus } from "@/components/dashboard/ConnectionStatus";
+import { QRCodePanel } from "@/components/dashboard/QRCodePanel";
 import { useWebSocket, useDemoMode } from "@/hooks/useWebSocket";
 import type { WebSocketMessage, CameraFeed } from "@/types/detection";
+
+const PREVIEW_URL = "https://id-preview--704dc477-74cd-4433-8298-df359598f7bb.lovable.app";
 
 const BACKEND_URL = "ws://localhost:8000/ws";
 
@@ -114,6 +117,7 @@ export default function Index() {
           <Button variant="ghost" size="icon">
             <Settings className="h-5 w-5" />
           </Button>
+          <QRCodePanel previewUrl={PREVIEW_URL} />
         </div>
       </header>
 
