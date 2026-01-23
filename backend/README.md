@@ -1,55 +1,51 @@
-# AMU-Guard AI - Python Backend
+# AMU-Guard AI Backend
 
-This is the Python backend for the AMU-Guard AI security system. It handles:
-- Camera stream processing with YOLO11
-- Facial recognition with face_recognition library
-- WebSocket streaming to the React frontend
-
-## Setup
+## Quick Start
 
 ### 1. Install Dependencies
-
 ```bash
-pip install fastapi uvicorn opencv-python ultralytics face_recognition numpy websockets python-multipart
+cd backend
+pip install fastapi uvicorn opencv-python ultralytics face_recognition numpy
 ```
 
-### 2. Download YOLO Model
+### 2. Known Faces (Already Configured)
+The following faces are pre-loaded for recognition:
+- **Mohammad Yaawar Khan** (`known_faces/Mohammad_Yaawar_Khan.jpeg`)
+- **Bakhtiyar Khan** (`known_faces/Bakhtiyar_Khan.jpeg`)
+- **Faiz Ahmad Khan** (`known_faces/Faiz_Ahmad_Khan.jpeg`)
 
+To add more faces, place images in `known_faces/` folder. Filename becomes the label.
+
+### 3. Run the Server
 ```bash
-# The model will auto-download on first run, or manually:
-wget https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n.pt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. Add Known Faces
+### 4. Connect Mobile Camera
+1. Find your computer's local IP: `ipconfig` (Windows) or `ifconfig` (Mac/Linux)
+2. On your phone, scan the QR code from the dashboard
+3. Enter the WebSocket URL: `ws://YOUR_IP:8000/ws/mobile`
+4. Start camera → Connect to backend
+5. Point the phone camera at a face — bounding boxes + names appear on the dashboard!
 
-Place reference images in `known_faces/` folder:
+## Architecture Flow
 ```
-known_faces/
-  ├── John_Doe.jpg
-  ├── Jane_Smith.jpg
-  └── Admin_User.png
+Phone Camera → /ws/mobile → YOLO + FaceRecognition → Broadcast → Dashboard /ws
 ```
-
-The filename (without extension) becomes the person's name label.
-
-### 4. Run the Server
-
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The WebSocket endpoint will be available at `ws://localhost:8000/ws`
 
 ## API Endpoints
 
-- `GET /` - Health check
-- `GET /cameras` - List available cameras
-- `WS /ws` - WebSocket stream for video frames and detections
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Health check + system status |
+| `GET /cameras` | List available cameras |
+| `WS /ws` | Dashboard receives processed frames + detections |
+| `WS /ws/mobile` | Mobile camera sends frames for processing |
 
 ## Configuration
 
 Edit `config.py` to customize:
-- Camera sources (webcam, RTSP, video files)
 - Detection confidence thresholds
-- Frame processing interval
-- Known faces directory
+- Frame processing interval (every Nth frame)
+- Face recognition tolerance
+- Video quality settings

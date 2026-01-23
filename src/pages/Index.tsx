@@ -16,7 +16,7 @@ const BACKEND_URL = "ws://localhost:8000/ws";
 
 export default function Index() {
   const [isDark, setIsDark] = useState(true);
-  const [selectedCameraId, setSelectedCameraId] = useState<string | null>("cam-1");
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>("mobile-cam");
 
   // Demo mode for UI testing
   const {
