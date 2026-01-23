@@ -133,8 +133,8 @@ export function useWebSocket({
 export function useDemoMode() {
   const [cameras, setCameras] = useState<CameraFeed[]>([
     {
-      id: "cam-1",
-      name: "Main Gate",
+      id: "mobile-cam",
+      name: "Main Gate (Mobile)",
       location: "Centenary Gate",
       status: "online",
       detections: [],

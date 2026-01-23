@@ -70,13 +70,20 @@ export function QRCodePanel({ previewUrl }: QRCodePanelProps) {
           
           {/* Instructions */}
           <div className="w-full space-y-2 rounded-lg bg-muted/30 p-3 text-xs">
-            <p className="font-medium">Setup Instructions:</p>
+            <p className="font-medium">📱 How it works:</p>
             <ol className="list-inside list-decimal space-y-1 text-muted-foreground">
-              <li>Scan the QR code or open the URL on your phone</li>
-              <li>Allow camera permissions when prompted</li>
-              <li>Enter your computer's local IP address</li>
-              <li>Tap "Start Camera" then "Connect to Backend"</li>
+              <li>Scan QR code on your phone</li>
+              <li>Allow camera permissions</li>
+              <li>Enter your PC's local IP (e.g., <code>ws://192.168.1.100:8000/ws/mobile</code>)</li>
+              <li>Tap "Start Camera" → "Connect to Backend"</li>
+              <li>Point phone at a face — boxes + names appear here!</li>
             </ol>
+            <p className="mt-2 font-medium text-primary">✨ Facial recognition active for:</p>
+            <ul className="list-inside list-disc text-muted-foreground">
+              <li>Mohammad Yaawar Khan</li>
+              <li>Bakhtiyar Khan</li>
+              <li>Faiz Ahmad Khan</li>
+            </ul>
           </div>
           
           <Button variant="outline" className="w-full" asChild>

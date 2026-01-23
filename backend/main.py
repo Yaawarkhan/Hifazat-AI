@@ -303,57 +303,37 @@ async def list_cameras():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for dashboard clients to receive processed frames."""
     await manager.connect(websocket)
     
-    # Start camera for this connection
-    cam = cameras.get("cam-1")
-    if cam:
-        try:
-            cam.start()
-        except Exception as e:
-            await websocket.send_json({"type": "error", "data": str(e)})
-            return
+    # Send initial status
+    await websocket.send_json({
+        "type": "status",
+        "data": {
+            "connected": True,
+            "known_faces": known_face_names,
+            "cameras": list(cameras.keys()) + ["mobile-cam"]
+        }
+    })
     
     try:
+        # Keep connection alive and listen for any commands from dashboard
         while True:
-            if cam and cam.is_running:
-                frame = cam.read_frame()
+            try:
+                # Wait for messages from dashboard (e.g., commands)
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                message = json.loads(data)
                 
-                if frame is not None:
-                    # Process every Nth frame
-                    if cam.frame_count % PROCESS_EVERY_N_FRAMES == 0:
-                        result = processor.process_frame(frame)
-                        annotated = result["annotated_frame"]
-                        detections = result["detections"]
-                    else:
-                        annotated = frame
-                        detections = []
+                # Handle dashboard commands if any
+                if message.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
                     
-                    # Encode frame as base64 JPEG
-                    _, buffer = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, FRAME_QUALITY])
-                    frame_b64 = base64.b64encode(buffer).decode('utf-8')
-                    
-                    # Send frame
-                    await websocket.send_json({
-                        "type": "frame",
-                        "cameraId": cam.camera_id,
-                        "data": f"data:image/jpeg;base64,{frame_b64}"
-                    })
-                    
-                    # Send detections
-                    if detections:
-                        await websocket.send_json({
-                            "type": "detection",
-                            "cameraId": cam.camera_id,
-                            "data": detections
-                        })
-            
-            await asyncio.sleep(0.033)  # ~30 FPS
-            
+            except asyncio.TimeoutError:
+                # Send heartbeat to keep connection alive
+                await websocket.send_json({"type": "heartbeat", "timestamp": datetime.now().isoformat()})
+                
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        if cam:
-            cam.stop()
 
 
 @app.websocket("/ws/mobile")
