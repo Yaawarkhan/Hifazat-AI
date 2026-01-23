@@ -68,9 +68,9 @@ export function LiveFeedViewer({ camera }: LiveFeedViewerProps) {
             <div className="flex h-full w-full items-center justify-center">
               <div className="text-center text-white/60">
                 <Camera className="mx-auto h-16 w-16 opacity-30" />
-                <p className="mt-4 font-mono text-sm">Connecting to stream...</p>
+                <p className="mt-4 font-mono text-sm">Waiting for mobile camera...</p>
                 <p className="mt-1 text-xs text-white/40">
-                  Waiting for Python backend at ws://localhost:8000
+                  Scan the QR code to connect your phone as a camera
                 </p>
               </div>
             </div>
