@@ -1,17 +1,22 @@
-import { useEffect, useRef, useState } from "react";
-import { Camera, CameraOff, Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { Camera, CameraOff, Wifi, WifiOff, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRealtimeStream } from "@/hooks/useRealtimeStream";
 
 export default function MobileCamera() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  
+  const frameIntervalRef = useRef<number | null>(null);
+
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [backendUrl, setBackendUrl] = useState("ws://192.168.1.100:8000/ws/mobile");
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
+  const [frameCount, setFrameCount] = useState(0);
+
+  const { isConnected, sendFrame } = useRealtimeStream({
+    channelName: "camera-stream",
+  });
 
   // Get camera stream
   const startCamera = async () => {
@@ -25,7 +30,7 @@ export default function MobileCamera() {
         },
         audio: false,
       });
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setIsStreaming(true);
@@ -44,92 +49,75 @@ export default function MobileCamera() {
       videoRef.current.srcObject = null;
       setIsStreaming(false);
     }
+    stopSending();
   };
 
   // Switch camera
   const switchCamera = () => {
+    const wasStreaming = isStreaming;
+    const wasSending = isSending;
     stopCamera();
     setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
+    
+    // Restart after mode change
+    setTimeout(async () => {
+      if (wasStreaming) {
+        await startCamera();
+        if (wasSending) {
+          startSending();
+        }
+      }
+    }, 100);
   };
 
-  useEffect(() => {
-    if (isStreaming) {
-      startCamera();
-    }
-  }, [facingMode]);
+  // Start sending frames
+  const startSending = useCallback(() => {
+    if (!videoRef.current || !canvasRef.current || !isConnected) return;
 
-  // Connect to backend WebSocket
-  const connectToBackend = () => {
-    try {
-      setError(null);
-      wsRef.current = new WebSocket(backendUrl);
-      
-      wsRef.current.onopen = () => {
-        setIsConnected(true);
-        startFrameCapture();
-      };
-      
-      wsRef.current.onclose = () => {
-        setIsConnected(false);
-      };
-      
-      wsRef.current.onerror = () => {
-        setError("Failed to connect to backend");
-        setIsConnected(false);
-      };
-    } catch (err) {
-      setError("Invalid WebSocket URL");
-    }
-  };
-
-  // Disconnect from backend
-  const disconnectFromBackend = () => {
-    wsRef.current?.close();
-    setIsConnected(false);
-  };
-
-  // Capture and send frames
-  const startFrameCapture = () => {
-    const canvas = canvasRef.current;
+    setIsSending(true);
     const video = videoRef.current;
-    
-    if (!canvas || !video) return;
-    
+    const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
+
     if (!ctx) return;
 
-    const captureFrame = () => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-      
+    const captureAndSend = () => {
+      if (!video || video.readyState !== 4) return;
+
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
-      
       ctx.drawImage(video, 0, 0);
-      
-      // Convert to base64 and send
-      const frameData = canvas.toDataURL("image/jpeg", 0.7);
-      wsRef.current.send(
-        JSON.stringify({
-          type: "frame",
-          cameraId: "mobile-cam",
-          data: frameData,
-        })
-      );
-      
-      // Send at ~10 FPS
-      requestAnimationFrame(() => {
-        setTimeout(captureFrame, 100);
-      });
+
+      // Convert to base64 JPEG with reduced quality for faster streaming
+      const frameData = canvas.toDataURL("image/jpeg", 0.6);
+      sendFrame("mobile-cam", frameData);
+      setFrameCount((prev) => prev + 1);
     };
-    
-    captureFrame();
+
+    // Send frames at ~8 FPS for smooth streaming
+    frameIntervalRef.current = window.setInterval(captureAndSend, 125);
+  }, [isConnected, sendFrame]);
+
+  // Stop sending frames
+  const stopSending = () => {
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
+    setIsSending(false);
   };
+
+  // Auto-start sending when connected and streaming
+  useEffect(() => {
+    if (isConnected && isStreaming && !isSending) {
+      startSending();
+    }
+  }, [isConnected, isStreaming, isSending, startSending]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopCamera();
-      disconnectFromBackend();
     };
   }, []);
 
@@ -148,7 +136,7 @@ export default function MobileCamera() {
             </span>
           ) : (
             <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <WifiOff className="h-4 w-4" /> Disconnected
+              <Loader2 className="h-4 w-4 animate-spin" /> Connecting...
             </span>
           )}
         </div>
@@ -164,7 +152,7 @@ export default function MobileCamera() {
           className="h-full w-full object-cover"
         />
         <canvas ref={canvasRef} className="hidden" />
-        
+
         {!isStreaming && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center text-white">
@@ -173,11 +161,18 @@ export default function MobileCamera() {
             </div>
           </div>
         )}
-        
-        {isStreaming && isConnected && (
+
+        {isStreaming && isSending && (
           <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-red-500 px-3 py-1 text-sm font-medium text-white">
             <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-            LIVE
+            LIVE • {frameCount} frames
+          </div>
+        )}
+
+        {isStreaming && !isConnected && (
+          <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-yellow-500 px-3 py-1 text-sm font-medium text-white">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Connecting to Cloud...
           </div>
         )}
       </div>
@@ -189,21 +184,20 @@ export default function MobileCamera() {
             {error}
           </div>
         )}
-        
-        {/* Backend URL Input */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Backend URL</label>
-          <input
-            type="text"
-            value={backendUrl}
-            onChange={(e) => setBackendUrl(e.target.value)}
-            placeholder="ws://192.168.1.100:8000/ws/mobile"
-            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-            disabled={isConnected}
-          />
-          <p className="text-xs text-muted-foreground">
-            Enter your computer's local IP address (find it with `ipconfig` or `ifconfig`)
+
+        {/* Status Info */}
+        <div className="rounded-lg bg-muted/30 p-3 text-xs">
+          <p className="font-medium text-primary">📱 Streaming via Cloud</p>
+          <p className="mt-1 text-muted-foreground">
+            {isConnected
+              ? "Connected! Your camera feed is being sent to the dashboard."
+              : "Connecting to Lovable Cloud..."}
           </p>
+          {isSending && (
+            <p className="mt-1 text-green-500">
+              ✅ Streaming at ~8 FPS • Frames sent: {frameCount}
+            </p>
+          )}
         </div>
 
         {/* Buttons */}
@@ -227,28 +221,19 @@ export default function MobileCamera() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          {!isConnected ? (
-            <Button
-              onClick={connectToBackend}
-              disabled={!isStreaming}
-              className="col-span-2"
-              variant="default"
-            >
-              <Wifi className="mr-2 h-4 w-4" />
-              Connect to Backend
-            </Button>
-          ) : (
-            <Button
-              onClick={disconnectFromBackend}
-              variant="destructive"
-              className="col-span-2"
-            >
-              <WifiOff className="mr-2 h-4 w-4" />
-              Disconnect
-            </Button>
-          )}
-        </div>
+        {isStreaming && !isSending && isConnected && (
+          <Button onClick={startSending} className="w-full" variant="default">
+            <Wifi className="mr-2 h-4 w-4" />
+            Start Streaming
+          </Button>
+        )}
+
+        {isSending && (
+          <Button onClick={stopSending} className="w-full" variant="destructive">
+            <WifiOff className="mr-2 h-4 w-4" />
+            Stop Streaming
+          </Button>
+        )}
       </div>
     </div>
   );
