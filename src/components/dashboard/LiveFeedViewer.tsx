@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils";
 
 interface LiveFeedViewerProps {
   camera: CameraFeed | null;
+  sosProgress?: number;
 }
 
-export function LiveFeedViewer({ camera }: LiveFeedViewerProps) {
+export function LiveFeedViewer({ camera, sosProgress = 0 }: LiveFeedViewerProps) {
   if (!camera) {
     return (
       <Card className="flex h-full items-center justify-center bg-muted/30">
@@ -80,6 +81,27 @@ export function LiveFeedViewer({ camera }: LiveFeedViewerProps) {
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="scanline h-full w-full" />
           </div>
+
+          {/* SOS Progress Indicator */}
+          {sosProgress > 0 && sosProgress < 3000 && (
+            <div className="absolute left-4 right-4 top-4 z-10">
+              <div className="rounded-lg bg-destructive/90 p-3 text-destructive-foreground">
+                <div className="flex items-center justify-between text-sm font-bold">
+                  <span>🆘 SOS GESTURE DETECTED</span>
+                  <span>{((sosProgress / 3000) * 100).toFixed(0)}%</span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-destructive-foreground/30">
+                  <div 
+                    className="h-full bg-destructive-foreground transition-all duration-100"
+                    style={{ width: `${(sosProgress / 3000) * 100}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-xs opacity-80">
+                  Hold arms raised for {Math.max(0, 3 - sosProgress / 1000).toFixed(1)}s more to trigger alert
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Detection boxes */}
           {camera.detections.map((detection) => (
