@@ -26,13 +26,19 @@ const KNOWN_FACES = [
 
 const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model";
 
+// Performance settings
+const FACE_DETECTION_INTERVAL_MS = 200; // Process faces every 200ms (5 FPS)
+const MIN_CONFIDENCE = 0.5;
+
 export function useFaceRecognition() {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const knownFacesRef = useRef<KnownFace[]>([]);
+  const lastProcessedRef = useRef<number>(0);
+  const cachedDetectionsRef = useRef<FaceDetection[]>([]);
 
-  // Load face-api models
+  // Load face-api models (using TinyFaceDetector for better performance)
   useEffect(() => {
     const loadModels = async () => {
       try {
@@ -40,9 +46,10 @@ export function useFaceRecognition() {
         setError(null);
         console.log("[FaceAPI] Loading models from CDN...");
 
+        // Use TinyFaceDetector instead of SSD for faster performance
         await Promise.all([
-          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
         ]);
 
@@ -54,8 +61,8 @@ export function useFaceRecognition() {
           try {
             const img = await faceapi.fetchImage(face.imagePath);
             const detection = await faceapi
-              .detectSingleFace(img)
-              .withFaceLandmarks()
+              .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 }))
+              .withFaceLandmarks(true)
               .withFaceDescriptor();
 
             if (detection) {
@@ -85,23 +92,35 @@ export function useFaceRecognition() {
     loadModels();
   }, []);
 
-  // Detect faces in an image/video element
+  // Detect faces in an image/video element with throttling
   const detectFaces = useCallback(
     async (
       input: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement
     ): Promise<FaceDetection[]> => {
-      if (!isModelLoaded) return [];
+      if (!isModelLoaded) return cachedDetectionsRef.current;
+
+      const now = Date.now();
+      
+      // Throttle face detection to 5 FPS for performance
+      if (now - lastProcessedRef.current < FACE_DETECTION_INTERVAL_MS) {
+        return cachedDetectionsRef.current;
+      }
+      lastProcessedRef.current = now;
 
       try {
+        // Use TinyFaceDetector with smaller input size for speed
         const detections = await faceapi
-          .detectAllFaces(input)
-          .withFaceLandmarks()
+          .detectAllFaces(input, new faceapi.TinyFaceDetectorOptions({ 
+            inputSize: 224, // Smaller = faster
+            scoreThreshold: MIN_CONFIDENCE 
+          }))
+          .withFaceLandmarks(true)
           .withFaceDescriptors();
 
         const inputWidth = "videoWidth" in input ? input.videoWidth : input.width;
         const inputHeight = "videoHeight" in input ? input.videoHeight : input.height;
 
-        return detections.map((detection, index) => {
+        const results = detections.map((detection, index) => {
           const { x, y, width, height } = detection.detection.box;
 
           // Find matching known face
@@ -113,14 +132,14 @@ export function useFaceRecognition() {
               detection.descriptor,
               knownFace.descriptor
             );
-            if (distance < 0.6 && distance < bestDistance) {
+            if (distance < 0.55 && distance < bestDistance) {
               bestDistance = distance;
               name = knownFace.name;
             }
           }
 
           return {
-            id: `face-${index}`,
+            id: `face-${index}-${now}`,
             name,
             confidence: 1 - bestDistance,
             boundingBox: {
@@ -131,9 +150,12 @@ export function useFaceRecognition() {
             },
           };
         });
+
+        cachedDetectionsRef.current = results;
+        return results;
       } catch (err) {
         console.error("[FaceAPI] Detection error:", err);
-        return [];
+        return cachedDetectionsRef.current;
       }
     },
     [isModelLoaded]

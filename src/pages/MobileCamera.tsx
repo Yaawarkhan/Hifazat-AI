@@ -1,32 +1,56 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Camera, CameraOff, Wifi, WifiOff, RefreshCw, Loader2 } from "lucide-react";
+import { Camera, CameraOff, Wifi, WifiOff, RefreshCw, Loader2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRealtimeStream } from "@/hooks/useRealtimeStream";
+
+// Performance presets
+const FPS_PRESETS = {
+  low: { fps: 10, quality: 0.4, label: "Low (10 FPS)" },
+  medium: { fps: 20, quality: 0.5, label: "Medium (20 FPS)" },
+  high: { fps: 30, quality: 0.6, label: "High (30 FPS)" },
+} as const;
+
+type FPSPreset = keyof typeof FPS_PRESETS;
 
 export default function MobileCamera() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameIntervalRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef<number>(0);
+  const frameCountRef = useRef<number>(0);
+  const fpsCounterRef = useRef<number>(0);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [frameCount, setFrameCount] = useState(0);
+  const [actualFPS, setActualFPS] = useState(0);
+  const [preset, setPreset] = useState<FPSPreset>("high");
 
   const { isConnected, sendFrame } = useRealtimeStream({
     channelName: "camera-stream",
   });
 
-  // Get camera stream
+  // Calculate actual FPS
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActualFPS(fpsCounterRef.current);
+      fpsCounterRef.current = 0;
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Get camera stream with optimized settings
   const startCamera = async () => {
     try {
       setError(null);
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 30, max: 60 },
         },
         audio: false,
       });
@@ -58,8 +82,7 @@ export default function MobileCamera() {
     const wasSending = isSending;
     stopCamera();
     setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
-    
-    // Restart after mode change
+
     setTimeout(async () => {
       if (wasStreaming) {
         await startCamera();
@@ -70,42 +93,59 @@ export default function MobileCamera() {
     }, 100);
   };
 
-  // Start sending frames
+  // High-performance frame capture using requestAnimationFrame
   const startSending = useCallback(() => {
     if (!videoRef.current || !canvasRef.current || !isConnected) return;
 
     setIsSending(true);
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const captureAndSend = () => {
-      if (!video || video.readyState !== 4) return;
+    const settings = FPS_PRESETS[preset];
+    const frameInterval = 1000 / settings.fps;
 
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      ctx.drawImage(video, 0, 0);
+    const captureFrame = () => {
+      if (!video || video.readyState !== 4 || !isSending) {
+        frameIntervalRef.current = requestAnimationFrame(captureFrame);
+        return;
+      }
 
-      // Convert to base64 JPEG with reduced quality for faster streaming
-      const frameData = canvas.toDataURL("image/jpeg", 0.6);
-      sendFrame("mobile-cam", frameData);
-      setFrameCount((prev) => prev + 1);
+      const now = performance.now();
+      const elapsed = now - lastFrameTimeRef.current;
+
+      if (elapsed >= frameInterval) {
+        lastFrameTimeRef.current = now - (elapsed % frameInterval);
+
+        // Use smaller resolution for faster encoding
+        canvas.width = Math.min(video.videoWidth, 640);
+        canvas.height = Math.min(video.videoHeight, 480);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Encode and send
+        const frameData = canvas.toDataURL("image/jpeg", settings.quality);
+        sendFrame("mobile-cam", frameData);
+        
+        frameCountRef.current++;
+        fpsCounterRef.current++;
+        setFrameCount(frameCountRef.current);
+      }
+
+      frameIntervalRef.current = requestAnimationFrame(captureFrame);
     };
 
-    // Send frames at ~8 FPS for smooth streaming
-    frameIntervalRef.current = window.setInterval(captureAndSend, 125);
-  }, [isConnected, sendFrame]);
+    frameIntervalRef.current = requestAnimationFrame(captureFrame);
+  }, [isConnected, sendFrame, preset, isSending]);
 
   // Stop sending frames
-  const stopSending = () => {
+  const stopSending = useCallback(() => {
     if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
+      cancelAnimationFrame(frameIntervalRef.current);
       frameIntervalRef.current = null;
     }
     setIsSending(false);
-  };
+  }, []);
 
   // Auto-start sending when connected and streaming
   useEffect(() => {
@@ -120,6 +160,14 @@ export default function MobileCamera() {
       stopCamera();
     };
   }, []);
+
+  // Restart streaming when preset changes
+  useEffect(() => {
+    if (isSending) {
+      stopSending();
+      setTimeout(() => startSending(), 50);
+    }
+  }, [preset]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -163,9 +211,15 @@ export default function MobileCamera() {
         )}
 
         {isStreaming && isSending && (
-          <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-red-500 px-3 py-1 text-sm font-medium text-white">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-            LIVE • {frameCount} frames
+          <div className="absolute left-4 top-4 flex flex-col gap-2">
+            <div className="flex items-center gap-2 rounded-full bg-red-500 px-3 py-1 text-sm font-medium text-white">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+              LIVE
+            </div>
+            <div className="flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-sm font-medium text-green-400">
+              <Zap className="h-3 w-3" />
+              {actualFPS} FPS
+            </div>
           </div>
         )}
 
@@ -185,9 +239,26 @@ export default function MobileCamera() {
           </div>
         )}
 
+        {/* FPS Preset Selector */}
+        {isStreaming && (
+          <div className="flex gap-2">
+            {(Object.keys(FPS_PRESETS) as FPSPreset[]).map((p) => (
+              <Button
+                key={p}
+                variant={preset === p ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPreset(p)}
+                className="flex-1"
+              >
+                {FPS_PRESETS[p].label}
+              </Button>
+            ))}
+          </div>
+        )}
+
         {/* Status Info */}
         <div className="rounded-lg bg-muted/30 p-3 text-xs">
-          <p className="font-medium text-primary">📱 Streaming via Cloud</p>
+          <p className="font-medium text-primary">📱 High-Performance Streaming</p>
           <p className="mt-1 text-muted-foreground">
             {isConnected
               ? "Connected! Your camera feed is being sent to the dashboard."
@@ -195,7 +266,7 @@ export default function MobileCamera() {
           </p>
           {isSending && (
             <p className="mt-1 text-green-500">
-              ✅ Streaming at ~8 FPS • Frames sent: {frameCount}
+              ✅ Streaming at {actualFPS} FPS • Frames: {frameCount}
             </p>
           )}
         </div>

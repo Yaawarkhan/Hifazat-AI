@@ -165,12 +165,16 @@ export function useDemoMode() {
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [campusStatus, setCampusStatus] = useState<CampusStatus>("secure");
 
-  const addAlert = useCallback((alert: Omit<AlertEvent, "id" | "timestamp" | "acknowledged">) => {
+  const addAlert = useCallback((alert: AlertEvent | Omit<AlertEvent, "id" | "timestamp" | "acknowledged">) => {
     const newAlert: AlertEvent = {
-      ...alert,
-      id: `alert-${Date.now()}`,
-      timestamp: Date.now(),
-      acknowledged: false,
+      id: "id" in alert ? alert.id : `alert-${Date.now()}`,
+      timestamp: "timestamp" in alert ? alert.timestamp : Date.now(),
+      acknowledged: "acknowledged" in alert ? alert.acknowledged : false,
+      type: alert.type,
+      message: alert.message,
+      cameraId: alert.cameraId,
+      cameraName: alert.cameraName,
+      snapshot: alert.snapshot,
     };
     setAlerts((prev) => [newAlert, ...prev].slice(0, 20));
     
