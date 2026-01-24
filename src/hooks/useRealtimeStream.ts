@@ -20,21 +20,31 @@ export function useRealtimeStream({
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const onFrameRef = useRef(onFrame);
+  
+  // Keep onFrame ref updated without triggering reconnection
+  useEffect(() => {
+    onFrameRef.current = onFrame;
+  }, [onFrame]);
 
-  // Connect to realtime channel
+  // Connect to realtime channel - only reconnect when channelName changes
   useEffect(() => {
     console.log("[Realtime] Connecting to channel:", channelName);
 
     const channel = supabase.channel(channelName, {
       config: {
-        broadcast: { self: false },
+        broadcast: { 
+          self: false,
+          ack: false, // Disable acknowledgments for lower latency
+        },
       },
     });
 
     channel
       .on("broadcast", { event: "frame" }, ({ payload }) => {
         const frame = payload as StreamFrame;
-        onFrame?.(frame);
+        // Use ref to avoid stale closure
+        onFrameRef.current?.(frame);
       })
       .subscribe((status) => {
         console.log("[Realtime] Channel status:", status);
@@ -53,26 +63,28 @@ export function useRealtimeStream({
       console.log("[Realtime] Disconnecting from channel");
       channel.unsubscribe();
     };
-  }, [channelName, onFrame]);
+  }, [channelName]); // Only depend on channelName, not onFrame
 
-  // Send a frame to the channel
+  // Send a frame to the channel - optimized for speed
   const sendFrame = useCallback(
-    async (cameraId: string, frameData: string) => {
+    (cameraId: string, frameData: string) => {
       if (!channelRef.current) return;
 
-      try {
-        await channelRef.current.send({
-          type: "broadcast",
-          event: "frame",
-          payload: {
-            cameraId,
-            frame: frameData,
-            timestamp: Date.now(),
-          } as StreamFrame,
-        });
-      } catch (err) {
-        console.error("[Realtime] Failed to send frame:", err);
-      }
+      // Fire and forget - don't await for maximum speed
+      channelRef.current.send({
+        type: "broadcast",
+        event: "frame",
+        payload: {
+          cameraId,
+          frame: frameData,
+          timestamp: Date.now(),
+        } as StreamFrame,
+      }).catch((err) => {
+        // Only log if it's a real error, not just network hiccup
+        if (err?.message !== "rate limited") {
+          console.error("[Realtime] Failed to send frame:", err);
+        }
+      });
     },
     []
   );

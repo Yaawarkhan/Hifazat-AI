@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Shield, Settings, Bell, Moon, Sun, Brain, Activity } from "lucide-react";
+import { Shield, Settings, Bell, Moon, Sun, Brain, Activity, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBanner } from "@/components/dashboard/StatusBanner";
 import { CameraCard } from "@/components/dashboard/CameraCard";
@@ -11,15 +11,17 @@ import { useRealtimeStream } from "@/hooks/useRealtimeStream";
 import { useFaceRecognition } from "@/hooks/useFaceRecognition";
 import { usePoseDetection } from "@/hooks/usePoseDetection";
 import { useThreatDetection } from "@/hooks/useThreatDetection";
+import { useWeaponDetection } from "@/hooks/useWeaponDetection";
 import { useDemoMode } from "@/hooks/useWebSocket";
 import type { CameraFeed, Detection, CampusStatus } from "@/types/detection";
 import { Badge } from "@/components/ui/badge";
 
 const PREVIEW_URL = "https://id-preview--704dc477-74cd-4433-8298-df359598f7bb.lovable.app";
 
-// Performance settings
-const FRAME_SKIP = 2; // Process every Nth frame
-const FACE_DETECTION_SKIP = 5; // Run face detection every Nth frame
+// Performance settings - optimized for low latency
+const FACE_DETECTION_SKIP = 8; // Run face detection every Nth frame (less frequent = faster)
+const POSE_DETECTION_SKIP = 4; // Run pose detection every Nth frame
+const WEAPON_DETECTION_SKIP = 6; // Run weapon detection every Nth frame
 
 export default function Index() {
   const [isDark, setIsDark] = useState(true);
@@ -27,13 +29,15 @@ export default function Index() {
   const [threatActive, setThreatActive] = useState(false);
   const [sosProgress, setSOSProgress] = useState(0);
   const [actualFPS, setActualFPS] = useState(0);
+  const [processingLoad, setProcessingLoad] = useState(0);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const frameCounterRef = useRef(0);
   const fpsCounterRef = useRef(0);
   const lastFPSUpdateRef = useRef(Date.now());
+  const processingRef = useRef(false);
+  const frameQueueRef = useRef<string | null>(null);
 
   // Demo mode for UI testing
   const {
@@ -47,14 +51,11 @@ export default function Index() {
     resetStatus,
   } = useDemoMode();
 
-  // Face recognition
+  // AI Hooks
   const { isModelLoaded: faceModelLoaded, isLoading: isFaceLoading, detectFaces, knownFacesCount } = useFaceRecognition();
-
-  // Pose detection for SOS
   const { isModelLoaded: poseModelLoaded, isLoading: isPoseLoading, detectPose, resetSOSState } = usePoseDetection();
-
-  // Threat detection
   const { createAlert, processThreats } = useThreatDetection();
+  const { isModelLoaded: weaponModelLoaded, isLoading: isWeaponLoading, detectWeapons, simulateWeaponDetection } = useWeaponDetection();
 
   // Calculate FPS
   useEffect(() => {
@@ -68,13 +69,149 @@ export default function Index() {
     return () => clearInterval(interval);
   }, []);
 
-  // Handle incoming frames from mobile camera
+  // Process frames with AI - non-blocking
+  const processFrameWithAI = useCallback(
+    async (frameData: string, cameraId: string) => {
+      if (!imageRef.current || !canvasRef.current) return;
+      if (processingRef.current) {
+        // Queue the latest frame, skip intermediate ones
+        frameQueueRef.current = frameData;
+        return;
+      }
+
+      processingRef.current = true;
+      const processStart = performance.now();
+
+      const img = imageRef.current;
+      
+      return new Promise<void>((resolve) => {
+        img.onload = async () => {
+          let detections: Detection[] = [];
+          const frameNum = frameCounterRef.current;
+
+          try {
+            // Run face detection (heavily throttled)
+            if (faceModelLoaded && frameNum % FACE_DETECTION_SKIP === 0) {
+              const faces = await detectFaces(img);
+              detections = faces.map((face) => ({
+                id: face.id,
+                class: "face" as const,
+                label: "Face",
+                confidence: face.confidence,
+                personName: face.name,
+                boundingBox: face.boundingBox,
+                timestamp: Date.now(),
+              }));
+            }
+
+            // Run pose detection for SOS (throttled)
+            if (poseModelLoaded && frameNum % POSE_DETECTION_SKIP === 0) {
+              const canvas = canvasRef.current;
+              if (canvas) {
+                const ctx = canvas.getContext("2d");
+                if (ctx) {
+                  canvas.width = img.width;
+                  canvas.height = img.height;
+                  ctx.drawImage(img, 0, 0);
+                  
+                  const poseResult = await detectPose(canvas);
+                  setSOSProgress(poseResult.duration);
+
+                  if (poseResult.sosTriggered) {
+                    const camera = cameras.find((c) => c.id === cameraId);
+                    const alert = await createAlert(
+                      "sos",
+                      cameraId,
+                      camera?.name || "Unknown Camera",
+                      frameData
+                    );
+                    if (alert) {
+                      addAlert(alert);
+                      setCampusStatus("alert");
+                      setThreatActive(true);
+                      resetSOSState();
+                      setTimeout(() => setThreatActive(false), 5000);
+                    }
+                  }
+                }
+              }
+            }
+
+            // Run weapon detection (throttled)
+            if (weaponModelLoaded && frameNum % WEAPON_DETECTION_SKIP === 0) {
+              const weaponDetections = await detectWeapons(img);
+              
+              if (weaponDetections.length > 0) {
+                const camera = cameras.find((c) => c.id === cameraId);
+                const alert = await createAlert(
+                  "weapon",
+                  cameraId,
+                  camera?.name || "Unknown Camera",
+                  frameData
+                );
+                if (alert) {
+                  addAlert(alert);
+                  setCampusStatus("lockdown");
+                  setThreatActive(true);
+                  setTimeout(() => setThreatActive(false), 10000);
+                }
+
+                // Add weapon detections to the list
+                detections.push(...weaponDetections.map(w => ({
+                  id: w.id,
+                  class: "threat" as const,
+                  label: w.class,
+                  confidence: w.confidence,
+                  boundingBox: w.boundingBox,
+                  timestamp: Date.now(),
+                })));
+              }
+            }
+
+            // Update camera detections
+            if (detections.length > 0) {
+              setCameras((prev) =>
+                prev.map((cam) =>
+                  cam.id === cameraId ? { ...cam, detections } : cam
+                )
+              );
+            }
+          } catch (err) {
+            console.error("[AI] Processing error:", err);
+          }
+
+          // Track processing load
+          setProcessingLoad(Math.round(performance.now() - processStart));
+          processingRef.current = false;
+
+          // Process queued frame if any
+          if (frameQueueRef.current) {
+            const nextFrame = frameQueueRef.current;
+            frameQueueRef.current = null;
+            processFrameWithAI(nextFrame, cameraId);
+          }
+
+          resolve();
+        };
+
+        img.onerror = () => {
+          processingRef.current = false;
+          resolve();
+        };
+
+        img.src = frameData;
+      });
+    },
+    [faceModelLoaded, poseModelLoaded, weaponModelLoaded, detectFaces, detectPose, detectWeapons, cameras, createAlert, addAlert, setCampusStatus, resetSOSState, setCameras]
+  );
+
+  // Handle incoming frames - optimized for speed
   const handleFrame = useCallback(
-    async (frame: { cameraId: string; frame: string; timestamp: number }) => {
+    (frame: { cameraId: string; frame: string; timestamp: number }) => {
       fpsCounterRef.current++;
       frameCounterRef.current++;
 
-      // Update camera with new frame immediately (for smooth display)
+      // Update camera frame immediately (don't wait for AI)
       setCameras((prev) =>
         prev.map((cam) =>
           cam.id === frame.cameraId
@@ -83,82 +220,10 @@ export default function Index() {
         )
       );
 
-      // Skip frames for AI processing (performance optimization)
-      const shouldProcessFaces = frameCounterRef.current % FACE_DETECTION_SKIP === 0;
-      const shouldProcessPose = frameCounterRef.current % FRAME_SKIP === 0;
-
-      if (!imageRef.current) return;
-
-      // Load image for processing
-      const img = imageRef.current;
-      img.src = frame.frame;
-
-      img.onload = async () => {
-        let detections: Detection[] = [];
-
-        // Run face detection (throttled)
-        if (faceModelLoaded && shouldProcessFaces) {
-          const faces = await detectFaces(img);
-          detections = faces.map((face) => ({
-            id: face.id,
-            class: "face" as const,
-            label: "Face",
-            confidence: face.confidence,
-            personName: face.name,
-            boundingBox: face.boundingBox,
-            timestamp: Date.now(),
-          }));
-        }
-
-        // Run pose detection for SOS (throttled)
-        if (poseModelLoaded && shouldProcessPose && videoRef.current) {
-          // For pose detection, we need to use the video element
-          // Create a temporary canvas with the image
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-              canvas.width = img.width;
-              canvas.height = img.height;
-              ctx.drawImage(img, 0, 0);
-              
-              const poseResult = await detectPose(canvas);
-              setSOSProgress(poseResult.duration);
-
-              if (poseResult.sosTriggered) {
-                // SOS triggered - create alert
-                const camera = cameras.find((c) => c.id === frame.cameraId);
-                const alert = await createAlert(
-                  "sos",
-                  frame.cameraId,
-                  camera?.name || "Unknown Camera",
-                  frame.frame
-                );
-                if (alert) {
-                  addAlert(alert);
-                  setCampusStatus("alert");
-                  setThreatActive(true);
-                  resetSOSState();
-                  
-                  // Auto-reset threat after 5 seconds
-                  setTimeout(() => setThreatActive(false), 5000);
-                }
-              }
-            }
-          }
-        }
-
-        // Update camera detections
-        if (detections.length > 0 || shouldProcessFaces) {
-          setCameras((prev) =>
-            prev.map((cam) =>
-              cam.id === frame.cameraId ? { ...cam, detections } : cam
-            )
-          );
-        }
-      };
+      // Process AI in background (non-blocking)
+      processFrameWithAI(frame.frame, frame.cameraId);
     },
-    [setCameras, faceModelLoaded, poseModelLoaded, detectFaces, detectPose, cameras, createAlert, addAlert, setCampusStatus, resetSOSState]
+    [setCameras, processFrameWithAI]
   );
 
   // Realtime stream connection
@@ -180,14 +245,35 @@ export default function Index() {
     document.documentElement.classList.add("dark");
   }, []);
 
-  const aiStatus = faceModelLoaded && poseModelLoaded ? "ready" : (isFaceLoading || isPoseLoading) ? "loading" : "offline";
+  // Simulate weapon detection for testing
+  const handleTestWeaponAlert = useCallback(async () => {
+    const weapon = simulateWeaponDetection();
+    const camera = cameras.find((c) => c.id === selectedCameraId);
+    const alert = await createAlert(
+      "weapon",
+      selectedCameraId || "mobile-cam",
+      camera?.name || "Mobile Camera",
+      selectedCamera?.lastFrame
+    );
+    if (alert) {
+      addAlert(alert);
+      setCampusStatus("lockdown");
+      setThreatActive(true);
+      setTimeout(() => setThreatActive(false), 5000);
+    }
+  }, [simulateWeaponDetection, cameras, selectedCameraId, selectedCamera, createAlert, addAlert, setCampusStatus]);
+
+  const aiStatus = (faceModelLoaded && poseModelLoaded && weaponModelLoaded) 
+    ? "ready" 
+    : (isFaceLoading || isPoseLoading || isWeaponLoading) 
+    ? "loading" 
+    : "offline";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Hidden elements for AI processing */}
       <img ref={imageRef} className="hidden" alt="" crossOrigin="anonymous" />
       <canvas ref={canvasRef} className="hidden" />
-      <video ref={videoRef} className="hidden" />
 
       {/* Threat Alert Overlay */}
       <ThreatOverlay active={threatActive} />
@@ -205,11 +291,17 @@ export default function Index() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* FPS Counter */}
+          {/* Performance Stats */}
           <Badge variant="outline" className="gap-1 font-mono">
             <Activity className="h-3 w-3" />
             {actualFPS} FPS
           </Badge>
+
+          {processingLoad > 0 && (
+            <Badge variant="outline" className="gap-1 font-mono text-xs">
+              AI: {processingLoad}ms
+            </Badge>
+          )}
 
           {/* AI Status Badge */}
           <Badge
@@ -231,6 +323,17 @@ export default function Index() {
           <Badge variant={isConnected ? "default" : "outline"} className="gap-1">
             {isConnected ? "☁️ Cloud Connected" : "⏳ Connecting..."}
           </Badge>
+
+          {/* Test Weapon Alert Button */}
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            onClick={handleTestWeaponAlert}
+            className="gap-1"
+          >
+            <AlertTriangle className="h-3 w-3" />
+            Test Alert
+          </Button>
 
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
