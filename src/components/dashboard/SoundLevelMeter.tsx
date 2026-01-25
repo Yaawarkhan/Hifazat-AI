@@ -12,6 +12,7 @@ interface SoundLevelMeterProps {
     isThreat: boolean;
   } | null;
   onToggle: () => void;
+  isMobileSource?: boolean;
 }
 
 export function SoundLevelMeter({
@@ -19,6 +20,7 @@ export function SoundLevelMeter({
   isListening,
   lastPrediction,
   onToggle,
+  isMobileSource = false,
 }: SoundLevelMeterProps) {
   // Determine color based on level and threat
   const getBarColor = () => {
@@ -39,7 +41,12 @@ export function SoundLevelMeter({
         <CardTitle className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <Volume2 className="h-4 w-4 text-primary" />
-            Acoustic Sentinel
+            <span>Acoustic Sentinel</span>
+            {isMobileSource && (
+              <span className="text-[10px] bg-status-secure/20 text-status-secure px-1.5 py-0.5 rounded-full">
+                📱 Mobile
+              </span>
+            )}
           </div>
           <Button
             variant={isListening ? "destructive" : "outline"}

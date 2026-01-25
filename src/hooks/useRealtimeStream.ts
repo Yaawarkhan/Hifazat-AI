@@ -8,24 +8,40 @@ interface StreamFrame {
   timestamp: number;
 }
 
+interface AudioData {
+  cameraId: string;
+  level: number; // 0-100
+  isThreat: boolean;
+  threatClass?: string;
+  confidence?: number;
+  timestamp: number;
+}
+
 interface UseRealtimeStreamOptions {
   channelName?: string;
   onFrame?: (frame: StreamFrame) => void;
+  onAudio?: (audio: AudioData) => void;
 }
 
 export function useRealtimeStream({
   channelName = "camera-stream",
   onFrame,
+  onAudio,
 }: UseRealtimeStreamOptions = {}) {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const onFrameRef = useRef(onFrame);
+  const onAudioRef = useRef(onAudio);
   
-  // Keep onFrame ref updated without triggering reconnection
+  // Keep refs updated without triggering reconnection
   useEffect(() => {
     onFrameRef.current = onFrame;
   }, [onFrame]);
+
+  useEffect(() => {
+    onAudioRef.current = onAudio;
+  }, [onAudio]);
 
   // Connect to realtime channel - optimized for zero latency
   useEffect(() => {
@@ -46,8 +62,11 @@ export function useRealtimeStream({
     channel
       .on("broadcast", { event: "frame" }, ({ payload }) => {
         const frame = payload as StreamFrame;
-        // Use ref to avoid stale closure - immediate callback
         onFrameRef.current?.(frame);
+      })
+      .on("broadcast", { event: "audio" }, ({ payload }) => {
+        const audio = payload as AudioData;
+        onAudioRef.current?.(audio);
       })
       .subscribe((status) => {
         console.log("[Realtime] Channel status:", status);
@@ -73,7 +92,6 @@ export function useRealtimeStream({
     (cameraId: string, frameData: string) => {
       if (!channelRef.current) return;
 
-      // Fire and forget - don't await for maximum speed
       channelRef.current.send({
         type: "broadcast",
         event: "frame",
@@ -83,9 +101,29 @@ export function useRealtimeStream({
           timestamp: Date.now(),
         } as StreamFrame,
       }).catch((err) => {
-        // Only log if it's a real error, not just network hiccup
         if (err?.message !== "rate limited") {
           console.error("[Realtime] Failed to send frame:", err);
+        }
+      });
+    },
+    []
+  );
+
+  // Send audio data to the channel
+  const sendAudio = useCallback(
+    (data: Omit<AudioData, "timestamp">) => {
+      if (!channelRef.current) return;
+
+      channelRef.current.send({
+        type: "broadcast",
+        event: "audio",
+        payload: {
+          ...data,
+          timestamp: Date.now(),
+        } as AudioData,
+      }).catch((err) => {
+        if (err?.message !== "rate limited") {
+          console.error("[Realtime] Failed to send audio:", err);
         }
       });
     },
@@ -96,5 +134,6 @@ export function useRealtimeStream({
     isConnected,
     error,
     sendFrame,
+    sendAudio,
   };
 }

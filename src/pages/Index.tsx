@@ -33,6 +33,8 @@ export default function Index() {
   const [sosProgress, setSOSProgress] = useState(0);
   const [actualFPS, setActualFPS] = useState(0);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [mobileAudioLevel, setMobileAudioLevel] = useState(0);
+  const [mobileAudioThreat, setMobileAudioThreat] = useState<{ class: string; confidence: number } | null>(null);
   const [threatLocations, setThreatLocations] = useState<{ cameraId: string; active: boolean }[]>([]);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -228,6 +230,33 @@ export default function Index() {
     [faceModelLoaded, poseModelLoaded, weaponModelLoaded, detectFaces, detectPose, detectWeapons, cameras, createAlert, addAlert, setCampusStatus, resetSOSState, setCameras]
   );
 
+  // Handle audio data from mobile camera
+  const handleMobileAudio = useCallback(
+    (audio: { cameraId: string; level: number; isThreat: boolean; threatClass?: string; confidence?: number }) => {
+      setMobileAudioLevel(audio.level);
+      
+      if (audio.isThreat && audio.threatClass && audio.confidence) {
+        setMobileAudioThreat({ class: audio.threatClass, confidence: audio.confidence });
+        
+        // Trigger alert
+        addAlert({
+          type: "sound",
+          message: `🔊 MOBILE AUDIO: ${audio.threatClass} detected (${(audio.confidence * 100).toFixed(0)}% confidence)`,
+          cameraId: audio.cameraId,
+          cameraName: cameras.find((c) => c.id === audio.cameraId)?.name || "Mobile Camera",
+          snapshot: undefined,
+        });
+        setCampusStatus("alert");
+        setThreatActive(true);
+        setTimeout(() => {
+          setThreatActive(false);
+          setMobileAudioThreat(null);
+        }, 5000);
+      }
+    },
+    [addAlert, setCampusStatus, cameras]
+  );
+
   // Handle incoming frames - immediate display, async processing
   const handleFrame = useCallback(
     (frame: { cameraId: string; frame: string; timestamp: number }) => {
@@ -253,6 +282,7 @@ export default function Index() {
   const { isConnected } = useRealtimeStream({
     channelName: "camera-stream",
     onFrame: handleFrame,
+    onAudio: handleMobileAudio,
   });
 
   const selectedCamera = cameras.find((c) => c.id === selectedCameraId) || null;
@@ -317,8 +347,8 @@ export default function Index() {
             <Shield className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">AMU-Guard AI</h1>
-            <p className="text-[10px] text-muted-foreground">Security Command Center</p>
+            <h1 className="text-lg font-bold tracking-tight">Hifazat.ai</h1>
+            <p className="text-[10px] text-muted-foreground">AI Security Command Center</p>
           </div>
         </div>
 
@@ -398,12 +428,13 @@ export default function Index() {
             threatLocations={threatLocations}
           />
           
-          {/* Sound Level Meter */}
+          {/* Sound Level Meter - Uses mobile audio when available */}
           <SoundLevelMeter
-            level={soundLevel}
-            isListening={isListening}
-            lastPrediction={lastPrediction}
+            level={mobileAudioLevel > 0 ? mobileAudioLevel : soundLevel}
+            isListening={mobileAudioLevel > 0 || isListening}
+            lastPrediction={mobileAudioThreat ? { topClass: mobileAudioThreat.class, confidence: mobileAudioThreat.confidence, isThreat: true, allPredictions: [] } : lastPrediction}
             onToggle={handleToggleAudio}
+            isMobileSource={mobileAudioLevel > 0}
           />
 
           {/* Camera Grid */}
