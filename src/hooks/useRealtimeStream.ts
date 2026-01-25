@@ -27,7 +27,7 @@ export function useRealtimeStream({
     onFrameRef.current = onFrame;
   }, [onFrame]);
 
-  // Connect to realtime channel - only reconnect when channelName changes
+  // Connect to realtime channel - optimized for zero latency
   useEffect(() => {
     console.log("[Realtime] Connecting to channel:", channelName);
 
@@ -35,7 +35,10 @@ export function useRealtimeStream({
       config: {
         broadcast: { 
           self: false,
-          ack: false, // Disable acknowledgments for lower latency
+          ack: false, // CRITICAL: Disable acks for zero latency
+        },
+        presence: {
+          key: "dashboard",
         },
       },
     });
@@ -43,7 +46,7 @@ export function useRealtimeStream({
     channel
       .on("broadcast", { event: "frame" }, ({ payload }) => {
         const frame = payload as StreamFrame;
-        // Use ref to avoid stale closure
+        // Use ref to avoid stale closure - immediate callback
         onFrameRef.current?.(frame);
       })
       .subscribe((status) => {
@@ -63,7 +66,7 @@ export function useRealtimeStream({
       console.log("[Realtime] Disconnecting from channel");
       channel.unsubscribe();
     };
-  }, [channelName]); // Only depend on channelName, not onFrame
+  }, [channelName]);
 
   // Send a frame to the channel - optimized for speed
   const sendFrame = useCallback(
