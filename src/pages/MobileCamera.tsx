@@ -3,12 +3,12 @@ import { Camera, CameraOff, Wifi, WifiOff, RefreshCw, Loader2, Zap } from "lucid
 import { Button } from "@/components/ui/button";
 import { useRealtimeStream } from "@/hooks/useRealtimeStream";
 
-// Ultra-high performance presets
+// Zero-latency performance presets - prioritizing speed over quality
 const FPS_PRESETS = {
-  low: { fps: 15, quality: 0.3, resolution: 320, label: "Low" },
-  medium: { fps: 30, quality: 0.4, resolution: 400, label: "Medium" },
-  high: { fps: 45, quality: 0.45, resolution: 360, label: "High" },
-  ultra: { fps: 60, quality: 0.4, resolution: 320, label: "Ultra" },
+  realtime: { fps: 60, quality: 0.25, resolution: 240, label: "⚡ Realtime" },
+  fast: { fps: 45, quality: 0.3, resolution: 280, label: "Fast" },
+  balanced: { fps: 30, quality: 0.4, resolution: 320, label: "Balanced" },
+  quality: { fps: 20, quality: 0.5, resolution: 400, label: "Quality" },
 } as const;
 
 type FPSPreset = keyof typeof FPS_PRESETS;
@@ -29,8 +29,9 @@ export default function MobileCamera() {
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [frameCount, setFrameCount] = useState(0);
   const [actualFPS, setActualFPS] = useState(0);
-  const [preset, setPreset] = useState<FPSPreset>("high");
+  const [preset, setPreset] = useState<FPSPreset>("realtime");
   const [encodeTime, setEncodeTime] = useState(0);
+  const [latency, setLatency] = useState(0);
 
   const { isConnected, sendFrame } = useRealtimeStream({
     channelName: "camera-stream",

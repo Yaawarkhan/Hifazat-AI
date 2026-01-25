@@ -1,6 +1,5 @@
-import { Camera, Wifi, WifiOff, Users, Car, User } from "lucide-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Camera, Users, Car, User } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import type { CameraFeed, Detection } from "@/types/detection";
 import { cn } from "@/lib/utils";
 
@@ -18,83 +17,58 @@ export function CameraCard({ camera, isSelected, onClick }: CameraCardProps) {
   return (
     <Card
       className={cn(
-        "cursor-pointer overflow-hidden transition-all duration-200 hover:ring-2 hover:ring-primary/50",
-        isSelected && "ring-2 ring-primary"
+        "cursor-pointer transition-all hover:ring-1 hover:ring-primary/50",
+        isSelected && "ring-2 ring-primary",
+        camera.status === "online" ? "border-status-secure/30" : "border-muted opacity-60"
       )}
       onClick={onClick}
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3">
+      <CardContent className="p-2">
         <div className="flex items-center gap-2">
-          <Camera className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-sm">{camera.name}</span>
-        </div>
-        <Badge
-          variant={camera.status === "online" ? "default" : "secondary"}
-          className={cn(
-            "text-xs",
-            camera.status === "online" && "bg-status-secure"
-          )}
-        >
-          {camera.status === "online" ? (
-            <Wifi className="mr-1 h-3 w-3" />
-          ) : (
-            <WifiOff className="mr-1 h-3 w-3" />
-          )}
-          {camera.status}
-        </Badge>
-      </CardHeader>
-
-      <CardContent className="p-0">
-        {/* Video Feed Placeholder */}
-        <div className="relative aspect-video bg-muted">
-          {camera.lastFrame ? (
-            <img
-              src={camera.lastFrame}
-              alt={`${camera.name} feed`}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <div className="text-center text-muted-foreground">
-                <Camera className="mx-auto h-8 w-8 opacity-50" />
-                <p className="mt-2 text-xs">Awaiting feed...</p>
+          {/* Thumbnail */}
+          <div className="relative h-12 w-16 flex-shrink-0 overflow-hidden rounded bg-muted">
+            {camera.lastFrame ? (
+              <img
+                src={camera.lastFrame}
+                alt={camera.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <Camera className="h-4 w-4 text-muted-foreground/50" />
               </div>
-            </div>
-          )}
-
-          {/* Scanline Effect */}
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="scanline h-full w-full" />
+            )}
+            {camera.status === "online" && (
+              <div className="absolute right-0.5 top-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-status-secure" />
+            )}
           </div>
 
-          {/* Detection Overlays */}
-          {camera.detections.map((detection) => (
-            <DetectionBox key={detection.id} detection={detection} />
-          ))}
-        </div>
-
-        {/* Stats Footer */}
-        <div className="flex items-center justify-between border-t bg-muted/30 px-3 py-2">
-          <span className="text-xs text-muted-foreground">{camera.location}</span>
-          <div className="flex items-center gap-3 text-xs">
-            {personCount > 0 && (
-              <span className="flex items-center gap-1 text-detection-person">
-                <Users className="h-3 w-3" />
-                {personCount}
-              </span>
-            )}
-            {vehicleCount > 0 && (
-              <span className="flex items-center gap-1 text-detection-vehicle">
-                <Car className="h-3 w-3" />
-                {vehicleCount}
-              </span>
-            )}
-            {faceCount > 0 && (
-              <span className="flex items-center gap-1 text-detection-face">
-                <User className="h-3 w-3" />
-                {faceCount}
-              </span>
-            )}
+          {/* Info */}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium">{camera.name}</p>
+            <p className="truncate text-[10px] text-muted-foreground">{camera.location}</p>
+            
+            {/* Stats */}
+            <div className="mt-0.5 flex items-center gap-2 text-[10px]">
+              {personCount > 0 && (
+                <span className="flex items-center gap-0.5 text-detection-person">
+                  <Users className="h-2.5 w-2.5" />
+                  {personCount}
+                </span>
+              )}
+              {vehicleCount > 0 && (
+                <span className="flex items-center gap-0.5 text-detection-vehicle">
+                  <Car className="h-2.5 w-2.5" />
+                  {vehicleCount}
+                </span>
+              )}
+              {faceCount > 0 && (
+                <span className="flex items-center gap-0.5 text-detection-face">
+                  <User className="h-2.5 w-2.5" />
+                  {faceCount}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>
@@ -107,21 +81,14 @@ function DetectionBox({ detection }: { detection: Detection }) {
   
   const colorClass = {
     person: "border-detection-person",
-    vehicle: "border-detection-vehicle",
+    vehicle: "border-detection-vehicle", 
     face: "border-detection-face",
-    threat: "border-detection-threat",
-  }[detectionClass];
-
-  const bgClass = {
-    person: "bg-detection-person",
-    vehicle: "bg-detection-vehicle",
-    face: "bg-detection-face",
-    threat: "bg-detection-threat",
+    threat: "border-detection-threat animate-pulse",
   }[detectionClass];
 
   return (
     <div
-      className={cn("absolute border-2", colorClass)}
+      className={cn("absolute border transition-all", colorClass)}
       style={{
         left: `${boundingBox.x}%`,
         top: `${boundingBox.y}%`,
@@ -129,14 +96,9 @@ function DetectionBox({ detection }: { detection: Detection }) {
         height: `${boundingBox.height}%`,
       }}
     >
-      <div
-        className={cn(
-          "absolute -top-5 left-0 whitespace-nowrap rounded-sm px-1 py-0.5 text-[10px] font-mono text-white",
-          bgClass
-        )}
-      >
+      <span className="absolute -top-4 left-0 whitespace-nowrap rounded bg-black/70 px-1 text-[8px] text-white">
         {personName || label} {(confidence * 100).toFixed(0)}%
-      </div>
+      </span>
     </div>
   );
 }
