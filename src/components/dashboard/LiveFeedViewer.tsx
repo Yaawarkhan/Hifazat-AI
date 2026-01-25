@@ -1,4 +1,5 @@
-import { Camera, Maximize2, ZoomIn, ZoomOut, Video } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Camera, Maximize2, Minimize2, ZoomIn, ZoomOut, Video, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CameraFeed, Detection } from "@/types/detection";
@@ -10,6 +11,106 @@ interface LiveFeedViewerProps {
 }
 
 export function LiveFeedViewer({ camera, sosProgress = 0 }: LiveFeedViewerProps) {
+  const [zoom, setZoom] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const feedContainerRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+
+  // Zoom in handler
+  const handleZoomIn = useCallback(() => {
+    setZoom((prev) => Math.min(prev + 0.5, 4));
+  }, []);
+
+  // Zoom out handler
+  const handleZoomOut = useCallback(() => {
+    setZoom((prev) => {
+      const newZoom = Math.max(prev - 0.5, 1);
+      if (newZoom === 1) {
+        setPanPosition({ x: 0, y: 0 });
+      }
+      return newZoom;
+    });
+  }, []);
+
+  // Reset zoom and pan
+  const handleResetZoom = useCallback(() => {
+    setZoom(1);
+    setPanPosition({ x: 0, y: 0 });
+  }, []);
+
+  // Toggle fullscreen
+  const handleToggleFullscreen = useCallback(async () => {
+    if (!containerRef.current) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.error("Fullscreen error:", err);
+    }
+  }, []);
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  // Pan handling for zoomed view
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (zoom <= 1) return;
+    isDraggingRef.current = true;
+    lastPosRef.current = { x: e.clientX, y: e.clientY };
+  }, [zoom]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDraggingRef.current || zoom <= 1) return;
+
+    const deltaX = e.clientX - lastPosRef.current.x;
+    const deltaY = e.clientY - lastPosRef.current.y;
+
+    setPanPosition((prev) => ({
+      x: Math.max(-200, Math.min(200, prev.x + deltaX)),
+      y: Math.max(-200, Math.min(200, prev.y + deltaY)),
+    }));
+
+    lastPosRef.current = { x: e.clientX, y: e.clientY };
+  }, [zoom]);
+
+  const handleMouseUp = useCallback(() => {
+    isDraggingRef.current = false;
+  }, []);
+
+  // Keyboard shortcuts for zoom
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "+" || e.key === "=") handleZoomIn();
+      if (e.key === "-") handleZoomOut();
+      if (e.key === "0") handleResetZoom();
+      if (e.key === "f" || e.key === "F") handleToggleFullscreen();
+      if (e.key === "Escape" && isFullscreen) {
+        document.exitFullscreen();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleZoomIn, handleZoomOut, handleResetZoom, handleToggleFullscreen, isFullscreen]);
+
   if (!camera) {
     return (
       <Card className="flex h-full items-center justify-center bg-muted/30">
@@ -26,7 +127,7 @@ export function LiveFeedViewer({ camera, sosProgress = 0 }: LiveFeedViewerProps)
   const faceCount = camera.detections.filter((d) => d.class === "face").length;
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden">
+    <Card ref={containerRef} className={cn("flex h-full flex-col overflow-hidden", isFullscreen && "rounded-none")}>
       <CardHeader className="flex flex-row items-center justify-between border-b py-3">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
@@ -45,25 +146,86 @@ export function LiveFeedViewer({ camera, sosProgress = 0 }: LiveFeedViewerProps)
               LIVE
             </span>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          
+          {/* Zoom indicator */}
+          {zoom > 1 && (
+            <span className="text-xs font-mono text-muted-foreground">
+              {zoom.toFixed(1)}x
+            </span>
+          )}
+
+          {/* Zoom controls */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8"
+            onClick={handleZoomIn}
+            title="Zoom In (+)"
+          >
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8"
+            onClick={handleZoomOut}
+            disabled={zoom <= 1}
+            title="Zoom Out (-)"
+          >
             <ZoomOut className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Maximize2 className="h-4 w-4" />
+
+          {/* Reset zoom */}
+          {zoom > 1 && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={handleResetZoom}
+              title="Reset Zoom (0)"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* Fullscreen toggle */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8"
+            onClick={handleToggleFullscreen}
+            title="Toggle Fullscreen (F)"
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </CardHeader>
 
       <CardContent className="flex-1 p-0">
-        <div className="relative h-full w-full bg-black">
+        <div 
+          ref={feedContainerRef}
+          className={cn(
+            "relative h-full w-full bg-black overflow-hidden",
+            zoom > 1 && "cursor-grab active:cursor-grabbing"
+          )}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
           {camera.lastFrame ? (
             <img
               src={camera.lastFrame}
               alt={`${camera.name} live feed`}
-              className="h-full w-full object-contain"
+              className="h-full w-full object-contain transition-transform duration-100"
+              style={{
+                transform: `scale(${zoom}) translate(${panPosition.x / zoom}px, ${panPosition.y / zoom}px)`,
+              }}
+              draggable={false}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
@@ -105,7 +267,7 @@ export function LiveFeedViewer({ camera, sosProgress = 0 }: LiveFeedViewerProps)
 
           {/* Detection boxes */}
           {camera.detections.map((detection) => (
-            <DetectionOverlay key={detection.id} detection={detection} />
+            <DetectionOverlay key={detection.id} detection={detection} zoom={zoom} panPosition={panPosition} />
           ))}
 
           {/* Bottom stats bar */}
@@ -125,7 +287,13 @@ export function LiveFeedViewer({ camera, sosProgress = 0 }: LiveFeedViewerProps)
   );
 }
 
-function DetectionOverlay({ detection }: { detection: Detection }) {
+interface DetectionOverlayProps {
+  detection: Detection;
+  zoom: number;
+  panPosition: { x: number; y: number };
+}
+
+function DetectionOverlay({ detection, zoom, panPosition }: DetectionOverlayProps) {
   const { boundingBox, class: detectionClass, confidence, personName, label } = detection;
   
   const colorClass = {
@@ -144,12 +312,14 @@ function DetectionOverlay({ detection }: { detection: Detection }) {
 
   return (
     <div
-      className={cn("absolute border-2 transition-all duration-100", colorClass)}
+      className={cn("absolute border-2 transition-all duration-100 pointer-events-none", colorClass)}
       style={{
         left: `${boundingBox.x}%`,
         top: `${boundingBox.y}%`,
         width: `${boundingBox.width}%`,
         height: `${boundingBox.height}%`,
+        transform: `scale(${zoom}) translate(${panPosition.x / zoom}px, ${panPosition.y / zoom}px)`,
+        transformOrigin: 'top left',
       }}
     >
       {/* Label above box */}
