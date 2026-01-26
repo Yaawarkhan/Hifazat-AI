@@ -183,7 +183,7 @@ export default function LaunchScreen() {
           <Button 
             variant="outline" 
             className="h-auto py-4 flex-col gap-2"
-            onClick={handleLaunchDashboard}
+            onClick={() => navigate("/dashboard?view=map")}
           >
             <Map className="h-5 w-5" />
             <span className="text-xs">View Map</span>
@@ -191,7 +191,7 @@ export default function LaunchScreen() {
           <Button 
             variant="outline" 
             className="h-auto py-4 flex-col gap-2"
-            onClick={handleLaunchDashboard}
+            onClick={() => navigate("/dashboard?view=alerts")}
           >
             <Bell className="h-5 w-5" />
             <span className="text-xs">Alerts</span>
@@ -199,7 +199,7 @@ export default function LaunchScreen() {
           <Button 
             variant="outline" 
             className="h-auto py-4 flex-col gap-2"
-            onClick={handleLaunchDashboard}
+            onClick={() => navigate("/dashboard?view=settings")}
           >
             <Settings className="h-5 w-5" />
             <span className="text-xs">Settings</span>

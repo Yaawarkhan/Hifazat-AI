@@ -223,7 +223,7 @@ export function LiveFeedViewer({ camera, sosProgress = 0 }: LiveFeedViewerProps)
               alt={`${camera.name} live feed`}
               className="h-full w-full object-contain transition-transform duration-100"
               style={{
-                transform: `scaleX(-1) scale(${zoom}) translate(${-panPosition.x / zoom}px, ${panPosition.y / zoom}px)`,
+                transform: `scale(${zoom}) translate(${panPosition.x / zoom}px, ${panPosition.y / zoom}px)`,
               }}
               draggable={false}
             />
