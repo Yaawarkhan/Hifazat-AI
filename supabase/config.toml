@@ -1,1 +1,4 @@
 project_id = "rjqhwkvvhnfftfdfjyej"
+
+[functions.emergency-dispatch]
+verify_jwt = false
