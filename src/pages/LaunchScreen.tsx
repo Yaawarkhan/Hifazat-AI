@@ -11,7 +11,9 @@ import {
   Radio,
   AlertTriangle,
   Phone,
-  Zap
+  Zap,
+  Search,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -169,9 +171,50 @@ export default function LaunchScreen() {
           />
         </div>
 
+        {/* Smart Search Feature Card */}
+        <Card className="mb-8 border-2 border-primary/30 bg-gradient-to-r from-primary/5 to-primary/10">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                  <Search className="h-6 w-6" />
+                </div>
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    Smart Search
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
+                      <Sparkles className="h-3 w-3" />
+                      AI Powered
+                    </span>
+                  </CardTitle>
+                  <CardDescription>Search footage using natural language</CardDescription>
+                </div>
+              </div>
+              <Button onClick={() => navigate("/smart-search")} className="gap-2">
+                Try Now
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <p className="text-sm text-muted-foreground">
+              Find specific moments in CCTV footage by describing what you're looking for. 
+              Example: "Find a person wearing a red shirt who entered after 10 PM"
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Quick Actions */}
         <h2 className="text-lg font-semibold mb-4 text-muted-foreground">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Button 
+            variant="outline" 
+            className="h-auto py-4 flex-col gap-2"
+            onClick={() => navigate("/smart-search")}
+          >
+            <Search className="h-5 w-5" />
+            <span className="text-xs">Smart Search</span>
+          </Button>
           <Button 
             variant="outline" 
             className="h-auto py-4 flex-col gap-2"

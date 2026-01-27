@@ -2,3 +2,6 @@ project_id = "rjqhwkvvhnfftfdfjyej"
 
 [functions.emergency-dispatch]
 verify_jwt = false
+
+[functions.smart-search]
+verify_jwt = false
