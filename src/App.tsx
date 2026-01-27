@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LaunchScreen from "./pages/LaunchScreen";
 import Dashboard from "./pages/Dashboard";
 import MobileCamera from "./pages/MobileCamera";
+import SmartSearch from "./pages/SmartSearch";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
           <Route path="/" element={<LaunchScreen />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/mobile-camera" element={<MobileCamera />} />
+          <Route path="/smart-search" element={<SmartSearch />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
