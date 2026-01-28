@@ -151,76 +151,181 @@ export default function SmartSearch() {
 
   // Extract frames from video for AI analysis
   const extractFrames = useCallback(async (): Promise<VideoFrame[]> => {
-    if (!videoRef.current || !canvasRef.current || !videoReady) {
-      console.log("[SmartSearch] Video not ready for frame extraction");
+    if (!videoRef.current || !canvasRef.current) {
+      console.log("[SmartSearch] Video or canvas not available");
       return [];
     }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return [];
 
-    // Set canvas size to match video
-    canvas.width = 640; // Lower resolution for faster processing
-    canvas.height = 360;
+    // Ensure video is fully loaded
+    if (video.readyState < 3) {
+      console.log("[SmartSearch] Waiting for video data...", video.readyState);
+      await new Promise<void>((resolve) => {
+        const handler = () => {
+          if (video.readyState >= 3) {
+            video.removeEventListener("canplaythrough", handler);
+            resolve();
+          }
+        };
+        video.addEventListener("canplaythrough", handler);
+        if (video.readyState >= 3) resolve();
+        setTimeout(resolve, 3000); // Fallback
+      });
+    }
+
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
+    
+    if (!videoWidth || !videoHeight) {
+      console.error("[SmartSearch] Video dimensions unavailable");
+      return [];
+    }
+    
+    // Set canvas size
+    canvas.width = 640;
+    canvas.height = Math.round((640 / videoWidth) * videoHeight);
+
+    console.log(`[SmartSearch] Canvas: ${canvas.width}x${canvas.height}, Video: ${videoWidth}x${videoHeight}, ReadyState: ${video.readyState}`);
 
     const frames: VideoFrame[] = [];
     const videoDuration = video.duration;
     
-    // Extract frames every 2 seconds
-    const frameInterval = 2;
-    const numFrames = Math.min(Math.ceil(videoDuration / frameInterval), 30); // Max 30 frames
+    if (!videoDuration || videoDuration <= 0 || !isFinite(videoDuration)) {
+      console.error("[SmartSearch] Invalid video duration:", videoDuration);
+      return [];
+    }
 
-    console.log(`[SmartSearch] Extracting ${numFrames} frames from ${videoDuration}s video`);
+    // Extract 20 frames spread across video
+    const numFrames = 20;
+    const frameInterval = videoDuration / numFrames;
 
-    // Store original time to restore later
+    console.log(`[SmartSearch] Extracting ${numFrames} frames from ${videoDuration.toFixed(2)}s video`);
+
+    // Save original state
     const originalTime = video.currentTime;
     const wasPlaying = !video.paused;
     if (wasPlaying) video.pause();
 
+    // Start from a small offset to avoid black intro frames
+    const startOffset = 1;
+
     for (let i = 0; i < numFrames; i++) {
-      const timestamp = i * frameInterval;
+      const timestamp = Math.min(startOffset + i * frameInterval, videoDuration - 0.5);
       
       try {
-        // Seek to timestamp
+        // Set the current time
         video.currentTime = timestamp;
         
-        // Wait for seek to complete
+        // Wait for the seeked event
         await new Promise<void>((resolve) => {
           const onSeeked = () => {
             video.removeEventListener("seeked", onSeeked);
             resolve();
           };
           video.addEventListener("seeked", onSeeked);
+          // Check if already at position
+          if (Math.abs(video.currentTime - timestamp) < 0.5) {
+            video.removeEventListener("seeked", onSeeked);
+            resolve();
+          }
+          setTimeout(() => {
+            video.removeEventListener("seeked", onSeeked);
+            resolve();
+          }, 800);
         });
-
-        // Draw frame to canvas
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Add timestamp overlay to frame
-        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-        ctx.fillRect(10, 10, 80, 25);
+        // Wait for video to have decoded data ready
+        await new Promise<void>(resolve => {
+          if (video.readyState >= 2) {
+            resolve();
+          } else {
+            const onData = () => {
+              video.removeEventListener("canplay", onData);
+              resolve();
+            };
+            video.addEventListener("canplay", onData);
+            setTimeout(() => {
+              video.removeEventListener("canplay", onData);
+              resolve();
+            }, 300);
+          }
+        });
+        
+        // Extra delay to ensure frame is painted
+        await new Promise(r => setTimeout(r, 150));
+
+        // Clear and draw
+        ctx.fillStyle = "#222222";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Try to draw the video
+        try {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        } catch (drawErr) {
+          console.error(`[SmartSearch] Draw failed at ${timestamp}s:`, drawErr);
+          continue;
+        }
+        
+        // Sample center area to check brightness
+        try {
+          const centerX = Math.floor(canvas.width * 0.4);
+          const centerY = Math.floor(canvas.height * 0.4);
+          const sampleSize = 30;
+          const imageData = ctx.getImageData(centerX, centerY, sampleSize, sampleSize);
+          const pixels = imageData.data;
+          
+          let totalR = 0, totalG = 0, totalB = 0;
+          for (let p = 0; p < pixels.length; p += 4) {
+            totalR += pixels[p];
+            totalG += pixels[p + 1];
+            totalB += pixels[p + 2];
+          }
+          const pixelCount = pixels.length / 4;
+          const avgBrightness = (totalR + totalG + totalB) / pixelCount / 3;
+          
+          console.log(`[SmartSearch] Frame ${i + 1}: time=${timestamp.toFixed(1)}s, brightness=${avgBrightness.toFixed(1)}`);
+          
+          // If too dark, try one more time
+          if (avgBrightness < 10) {
+            await new Promise(r => setTimeout(r, 250));
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          }
+        } catch (sampleErr) {
+          console.warn(`[SmartSearch] Canvas tainted at ${timestamp}s - CORS issue`);
+        }
+        
+        // Add timestamp overlay
+        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+        ctx.fillRect(8, 8, 90, 28);
         ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 14px monospace";
-        ctx.fillText(formatTime(timestamp), 18, 28);
+        ctx.font = "bold 16px monospace";
+        ctx.fillText(formatTime(timestamp), 14, 28);
         
         // Convert to base64
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        frames.push({ timestamp, data: dataUrl });
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         
-        console.log(`[SmartSearch] Extracted frame at ${timestamp}s`);
+        if (dataUrl && dataUrl.length > 1000) {
+          frames.push({ timestamp, data: dataUrl });
+          console.log(`[SmartSearch] ✓ Frame ${i + 1}/${numFrames} at ${timestamp.toFixed(1)}s (${Math.round(dataUrl.length / 1024)}KB)`);
+        } else {
+          console.warn(`[SmartSearch] Frame ${i + 1} too small: ${dataUrl?.length || 0} bytes`);
+        }
       } catch (err) {
-        console.error(`[SmartSearch] Failed to extract frame at ${timestamp}s:`, err);
+        console.error(`[SmartSearch] Error at frame ${i + 1}:`, err);
       }
     }
 
-    // Restore original state
+    // Restore
     video.currentTime = originalTime;
     if (wasPlaying) video.play();
 
+    console.log(`[SmartSearch] Extracted ${frames.length} frames total`);
     return frames;
-  }, [videoReady]);
+  }, []);
 
   const handleVideoTimeUpdate = () => {
     if (videoRef.current) {
