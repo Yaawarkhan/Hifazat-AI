@@ -121,27 +121,28 @@ export default function MobileCamera() {
         const level = Math.min(100, (average / 255) * 100 * 2);
         setAudioLevel(level);
 
-        // Analyze for threats (simplified YAMNet-style detection)
+        // Analyze for threats (simplified, less sensitive - only very loud sounds)
         const highFreqEnergy = dataArray.slice(400).reduce((a, b) => a + b, 0);
         const lowFreqEnergy = dataArray.slice(0, 100).reduce((a, b) => a + b, 0);
         
-        // Detect potential screams (high frequency, high amplitude)
-        const isHighPitched = highFreqEnergy > lowFreqEnergy * 0.8;
-        const isLoud = level > 70;
+        // Detect potential screams: must be very loud AND high-pitched
+        const isHighPitched = highFreqEnergy > lowFreqEnergy * 1.1;
+        const isLoudScream = level > 88;
+        const isVeryLoudImpact = level > 95;
         
         let isThreat = false;
         let threatClass: string | undefined;
         let confidence = 0;
 
-        if (isLoud && isHighPitched) {
+        if (isLoudScream && isHighPitched) {
           isThreat = true;
           threatClass = "Scream/Shout";
-          confidence = Math.min(0.95, 0.5 + (level / 100) * 0.4);
-        } else if (level > 85) {
-          // Very loud = possible explosion or bang
+          confidence = Math.min(0.92, 0.6 + (level / 100) * 0.3);
+        } else if (isVeryLoudImpact) {
+          // Only very loud levels = possible explosion or bang
           isThreat = true;
           threatClass = "Loud Impact/Bang";
-          confidence = Math.min(0.9, 0.4 + (level / 100) * 0.5);
+          confidence = Math.min(0.88, 0.5 + (level / 100) * 0.4);
         }
 
         // Send audio data to dashboard
@@ -366,7 +367,7 @@ export default function MobileCamera() {
                 <Volume2 className="h-3 w-3 text-primary" />
                 <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                   <div 
-                    className={`h-full rounded-full transition-all duration-100 ${audioLevel > 70 ? 'bg-status-alert' : 'bg-status-secure'}`}
+                    className={`h-full rounded-full transition-all duration-100 ${audioLevel > 88 ? 'bg-status-alert' : 'bg-status-secure'}`}
                     style={{ width: `${audioLevel}%` }}
                   />
                 </div>

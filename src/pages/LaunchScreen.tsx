@@ -13,8 +13,10 @@ import {
   Phone,
   Zap,
   Search,
-  Sparkles
+  Sparkles,
+  UserPlus
 } from "lucide-react";
+import { AddStudentDialog } from "@/components/AddStudentDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -73,6 +75,7 @@ function ModuleCard({ icon, title, description, status = "standby", onClick, cla
 export default function LaunchScreen() {
   const navigate = useNavigate();
   const [isInitializing, setIsInitializing] = useState(false);
+  const [addStudentOpen, setAddStudentOpen] = useState(false);
 
   const handleLaunchDashboard = () => {
     setIsInitializing(true);
@@ -210,6 +213,14 @@ export default function LaunchScreen() {
           <Button 
             variant="outline" 
             className="h-auto py-4 flex-col gap-2"
+            onClick={() => setAddStudentOpen(true)}
+          >
+            <UserPlus className="h-5 w-5" />
+            <span className="text-xs">Add Student</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            className="h-auto py-4 flex-col gap-2"
             onClick={() => navigate("/smart-search")}
           >
             <Search className="h-5 w-5" />
@@ -278,6 +289,8 @@ export default function LaunchScreen() {
           <p className="mt-1">Powered by AI Vision, Audio Analysis & Real-time Alerting</p>
         </div>
       </div>
+
+      <AddStudentDialog open={addStudentOpen} onOpenChange={setAddStudentOpen} />
     </div>
   );
 }

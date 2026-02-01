@@ -39,7 +39,7 @@ export function useAudioDetection(options: UseAudioDetectionOptions = {}) {
   const {
     enabled = false,
     sampleRate = 16000,
-    confidenceThreshold = 0.3,
+    confidenceThreshold = 0.78,
     onThreatDetected,
   } = options;
 
@@ -72,24 +72,24 @@ export function useAudioDetection(options: UseAudioDetectionOptions = {}) {
     }
     const rms = Math.sqrt(sum / buffer.length);
 
-    // Simulate threat detection based on audio characteristics
-    const hasHighAmplitude = rms > 0.1;
+    // Simulate threat detection based on audio characteristics (less sensitive)
+    const hasHighAmplitude = rms > 0.28;
     const frequencyVariance = calculateFrequencyVariance(buffer);
-    const hasHighVariance = frequencyVariance > 0.5;
+    const hasHighVariance = frequencyVariance > 0.82;
 
     // Demo predictions - in production, use actual YAMNet inference
     let topClass = "Background noise";
-    let confidence = 0.2 + Math.random() * 0.3;
+    let confidence = 0.15 + Math.random() * 0.2;
     let isThreat = false;
 
     if (hasHighAmplitude && hasHighVariance) {
       const threatIndex = Math.floor(Math.random() * THREAT_SOUNDS.length);
       topClass = THREAT_SOUNDS[threatIndex];
-      confidence = 0.4 + Math.random() * 0.5;
+      confidence = 0.65 + Math.random() * 0.25;
       isThreat = confidence > confidenceThreshold;
     } else if (hasHighAmplitude) {
       topClass = "Speech";
-      confidence = 0.5 + Math.random() * 0.3;
+      confidence = 0.4 + Math.random() * 0.25;
     }
 
     return {

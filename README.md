@@ -64,6 +64,18 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
 
+## Add Student (Facial Recognition)
+
+From the homepage, use **Add Student** to register a student for face recognition: upload a photo with full name and enrollment number. Images are stored in Supabase Storage under the `known-faces` bucket and used by the in-app face recognition.
+
+**Setup:**
+
+1. In [Supabase Dashboard](https://supabase.com/dashboard) → your project → **Storage**, create a new bucket named `known-faces`.
+2. Set the bucket to **Public** (so the app can load images for recognition).
+3. Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are set in your `.env`.
+
+Files are stored as `{enrollment}_{Name}.jpg` (e.g. `2024ABC_John_Doe.jpg`). The existing faces in `public/known-faces/` are still used as a fallback.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!

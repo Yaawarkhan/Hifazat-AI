@@ -376,13 +376,14 @@ export default function SmartSearch() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const handleSearch = useCallback(async () => {
-    if (!query.trim() || isSearching) return;
+  const handleSearch = useCallback(async (searchQuery?: string) => {
+    const queryToUse = searchQuery ?? query;
+    if (!queryToUse.trim() || isSearching) return;
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
-      content: query
+      content: queryToUse
     };
 
     const loadingMessage: ChatMessage = {
@@ -393,7 +394,7 @@ export default function SmartSearch() {
     };
 
     setMessages(prev => [...prev, userMessage, loadingMessage]);
-    setQuery("");
+    setQuery(searchQuery ?? "");
     setIsSearching(true);
     setActiveBoundingBox(null);
 
@@ -426,7 +427,7 @@ export default function SmartSearch() {
       // Send frames to edge function for analysis
       const { data, error } = await supabase.functions.invoke("smart-search", {
         body: { 
-          query: userMessage.content,
+          query: queryToUse,
           frames: frames,
           videoDuration: duration
         }
@@ -473,7 +474,7 @@ export default function SmartSearch() {
     }
   }, [query, isSearching, duration, toast, extractFrames]);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSearch();
@@ -528,7 +529,6 @@ export default function SmartSearch() {
                 onLoadedMetadata={handleVideoLoaded}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
-                crossOrigin="anonymous"
               />
               {/* Bounding box overlay */}
               <canvas 
@@ -676,7 +676,7 @@ export default function SmartSearch() {
                 placeholder="Describe what you're looking for..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 disabled={isSearching || !videoReady}
                 className="flex-1"
               />
@@ -703,7 +703,7 @@ export default function SmartSearch() {
               ].map((example) => (
                 <button
                   key={example}
-                  onClick={() => setQuery(example)}
+                  onClick={() => handleSearch(example)}
                   disabled={isSearching || !videoReady}
                   className="text-xs px-2 py-0.5 rounded-full bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50"
                 >

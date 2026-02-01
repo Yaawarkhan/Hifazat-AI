@@ -91,8 +91,9 @@ If you don't find any matches for the query, be honest and say so. Only report w
       // Add frames as images (limit to 20 frames to stay within limits)
       const maxFrames = Math.min(frames.length, 20);
       const step = Math.max(1, Math.floor(frames.length / maxFrames));
+      let framesAdded = 0;
       
-      for (let i = 0; i < frames.length && content.length <= maxFrames + 1; i += step) {
+      for (let i = 0; i < frames.length && framesAdded < maxFrames; i += step) {
         const frame = frames[i];
         if (frame.data) {
           content.push({
@@ -106,6 +107,7 @@ If you don't find any matches for the query, be honest and say so. Only report w
             type: "text",
             text: `[Frame at ${frame.timestamp}s]`
           });
+          framesAdded++;
         }
       }
       
@@ -125,7 +127,7 @@ If you don't find any matches for the query, be honest and say so. Only report w
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash", // Vision-capable model
+        model: "gemini-2.5-flash", // Vision-capable model (Lovable gateway format)
         messages,
         response_format: { type: "json_object" }
       }),
