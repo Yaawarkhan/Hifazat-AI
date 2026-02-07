@@ -85,6 +85,3 @@ Shapely: A geometry library used for the "Virtual Fencing" logic (calculating if
 
 YAML / JSON: For handling system configurations and security thresholds.
 
-
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
