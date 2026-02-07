@@ -1,18 +1,10 @@
-# Welcome to your Lovable project
+# Welcome to Hifazat-AI
 
 ## Project info
-
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+This project proposes an AI-powered smart surveillance and response system that transforms traditional CCTV infrastructure into an intelligent, proactive security platform for large university campuses like Aligarh Muslim University (AMU). By integrating advanced computer vision, sound analysis, geospatial mapping, and real-time communication, the system enables instant incident detection, natural-language video search, silent SOS signaling, threat identification, and coordinated security response. Designed as a software-first, cost-effective solution, it leverages existing cameras and infrastructure while remaining scalable for future upgrades such as autonomous drone responders. The result is a faster, smarter, and more reliable campus security ecosystem.
 
 ## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
+There are several ways you can do it:
 
 **Use your preferred IDE**
 
@@ -54,32 +46,45 @@ npm run dev
 
 This project is built with:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+1. Programming & Core Frameworks
+Python: The primary language for logic, AI inference, and backend operations.
 
-## How can I deploy this project?
+OpenCV (cv2): Used for real-time video stream capture, frame manipulation, drawing bounding boxes, and image preprocessing.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Flask / FastAPI: (Depending on your dashboard/ implementation) Used to serve the web interface and handle API requests for the "God View."
 
-## Add Student (Facial Recognition)
+2. Artificial Intelligence & Computer Vision
+YOLOv8 (Ultralytics): The core object detection engine used for weapons, vehicles, and person detection.
 
-From the homepage, use **Add Student** to register a student for face recognition: upload a photo with full name and enrollment number. Images are stored in Supabase Storage under the `known-faces` bucket and used by the in-app face recognition.
+MediaPipe: Specifically used for the Pose Landmarking model to track body joints for SOS gesture detection.
 
-**Setup:**
+CLIP (OpenAI): Utilized via the sentence-transformers library to enable the natural language "Forensic Smart Search."
 
-1. In [Supabase Dashboard](https://supabase.com/dashboard) → your project → **Storage**, create a new bucket named `known-faces`.
-2. Set the bucket to **Public** (so the app can load images for recognition).
-3. Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are set in your `.env`.
+DeepFace / InsightFace: The underlying frameworks for facial recognition and extracting identity embeddings.
 
-Files are stored as `{enrollment}_{Name}.jpg` (e.g. `2024ABC_John_Doe.jpg`). The existing faces in `public/known-faces/` are still used as a fallback.
+PaddleOCR / EasyOCR: Used for extracting text from vehicle license plates.
 
-## Can I connect a custom domain to my Lovable project?
+3. Data Management & Storage
+ChromaDB / Faiss: Vector databases used to store and search the image embeddings for the Forensic Search feature.
 
-Yes, you can!
+PostgreSQL / SQLite: Relational databases used to store the student registry (Enrollment IDs) and the AMU-registered vehicle database.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+NumPy & Pandas: Used for heavy mathematical operations on coordinate arrays and managing historical log data.
+
+4. External APIs & Integrations
+Twilio API: The bridge used to send automated WhatsApp alerts and security notifications.
+
+Google Maps JavaScript API: Powers the "God View" geospatial dashboard for campus-wide monitoring.
+
+MQTT (Paho-MQTT): Likely used for the "Campus Lockdown" signaling, allowing the central server to talk to remote camera nodes or IoT gate locks.
+
+5. Tools & Utilities
+PyTorch / ONNX Runtime: Used as the inference engine to run the deep learning models efficiently.
+
+Shapely: A geometry library used for the "Virtual Fencing" logic (calculating if a point is inside a digital boundary).
+
+YAML / JSON: For handling system configurations and security thresholds.
+
+
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
